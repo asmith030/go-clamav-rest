@@ -24,6 +24,10 @@ func RunHTTPListener(clamd_address string, port int, logger *logrus.Logger) erro
 		address: clamd_address,
 		logger:  logger,
 	})
+	m.Handle("/scanReply", &scanReplyHandler{
+		address: clamd_address,
+		logger:  logger,
+	})
 	logger.Infof("Starting the webserver on port %v", port)
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
@@ -113,5 +117,44 @@ func (sh *scanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Everything ok : true\n"))
 	}
 
+	return
+}
+
+type scanReplyHandler struct {
+	address string
+	logger  *logrus.Logger
+}
+
+func (srh *scanReplyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseMultipartForm(256 * 1024 * 1024)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("not okay"))
+	}
+
+	files := r.MultipartForm.File["file"]
+
+	if len(files) == 0 {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("empty file\n"))
+		return
+	}
+
+	f, err := files[0].Open()
+	defer f.Close()
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("not okay"))
+	}
+
+	c := clamd.NewClamd(srh.address)
+	response, err := c.ScanStream(f, make(chan bool))
+
+	result := <-response
+	w.WriteHeader(http.StatusOK)
+	srh.logger.Infof("Scanning %v and returning reply", files[0].Filename)
+	w.Write([]byte(result.Raw))
 	return
 }
