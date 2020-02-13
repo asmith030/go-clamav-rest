@@ -18,4 +18,7 @@ RUN addgroup -g 1000 -S app && \
 USER 1000
 
 COPY --from=builder /go/bin/go-clamav-rest /go-clamav-rest
-CMD ["/go-clamav-rest"]
+
+EXPOSE 8080
+
+ENTRYPOINT ["/go-clamav-rest"]
