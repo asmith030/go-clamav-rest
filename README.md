@@ -10,6 +10,8 @@ Usage of go-clamav-rest:
     	Address of the clamd instance (default "localhost")
   -listenPort int
     	TCP port that we should listen on (default 8080)
+  -maxFileMem int
+    	Maximum memory used to store uploaded files (excess is written to disk) (default 128)
   -port int
     	TCP port of the clamd instance (default 3310)
 ```
