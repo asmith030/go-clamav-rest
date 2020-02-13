@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func RunHTTPListener(clamd_address string, port int, logger *logrus.Logger) error {
+func RunHTTPListener(clamd_address string, port int, max_file_mem int64, logger *logrus.Logger) error {
 	m := http.NewServeMux()
 	hh := &healthHandler{
 		healthy: false,
@@ -21,12 +21,14 @@ func RunHTTPListener(clamd_address string, port int, logger *logrus.Logger) erro
 		logger:  logger,
 	})
 	m.Handle("/scan", &scanHandler{
-		address: clamd_address,
-		logger:  logger,
+		address:      clamd_address,
+		max_file_mem: max_file_mem,
+		logger:       logger,
 	})
 	m.Handle("/scanReply", &scanReplyHandler{
-		address: clamd_address,
-		logger:  logger,
+		address:      clamd_address,
+		max_file_mem: max_file_mem,
+		logger:       logger,
 	})
 	logger.Infof("Starting the webserver on port %v", port)
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -76,12 +78,13 @@ func (ph *pingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type scanHandler struct {
-	address string
-	logger  *logrus.Logger
+	address      string
+	max_file_mem int64
+	logger       *logrus.Logger
 }
 
 func (sh *scanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(256 * 1024 * 1024)
+	err := r.ParseMultipartForm(sh.max_file_mem * 1024 * 1024)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -107,6 +110,11 @@ func (sh *scanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := clamd.NewClamd(sh.address)
 	response, err := c.ScanStream(f, make(chan bool))
 
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("not okay"))
+	}
+
 	result := <-response
 	w.WriteHeader(http.StatusOK)
 	if result.Status == "FOUND" {
@@ -121,12 +129,13 @@ func (sh *scanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type scanReplyHandler struct {
-	address string
-	logger  *logrus.Logger
+	address      string
+	max_file_mem int64
+	logger       *logrus.Logger
 }
 
 func (srh *scanReplyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(256 * 1024 * 1024)
+	err := r.ParseMultipartForm(srh.max_file_mem * 1024 * 1024)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -151,6 +160,11 @@ func (srh *scanReplyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c := clamd.NewClamd(srh.address)
 	response, err := c.ScanStream(f, make(chan bool))
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("not okay"))
+	}
 
 	result := <-response
 	w.WriteHeader(http.StatusOK)
